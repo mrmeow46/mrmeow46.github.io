@@ -1,0 +1,750 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#0e1430">
+<title>Honest Blocks</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Honest Blocks">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" type="image/png" href="apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bungee&family=Fredoka:wght@400;500;600&display=swap">
+<style>
+:root { padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px); box-sizing: border-box; }
+body { margin: 0; }
+[hidden] { display: none !important; }
+/* Layout: one-screen arcade cabinet. Score on top, the 8x8 well in the middle, a three-slot tray below. Single dark world. */
+:root {
+  --ink: #0e1430;
+  --board: #17204a;
+  --well: #212b5a;
+  --line: #2e3a76;
+  --text: #eef1ff;
+  --muted: #9ba4d8;
+  --gold: #ffcf3f;
+  --good: #5fe0a6;
+  --warn: #ff9f8a;
+  --display: "Bungee", "Arial Black", Impact, sans-serif;
+  --body: "Fredoka", "Trebuchet MS", system-ui, sans-serif;
+  --cell: 44px; --gap: 3px; --pad: 10px; --pc: 22px; --pg: 2px;
+  color-scheme: dark;
+}
+html, body { height: 100%; }
+body {
+  background: var(--ink);
+  background-image: radial-gradient(120% 70% at 50% 0%, #1c2760 0%, var(--ink) 60%);
+  color: var(--text);
+  font-family: var(--body);
+  overscroll-behavior: none;
+  -webkit-tap-highlight-color: transparent;
+}
+.app {
+  min-height: 100%;
+  box-sizing: border-box;
+  display: flex; flex-direction: column; align-items: center;
+  gap: 10px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 10px 14px;
+  user-select: none; -webkit-user-select: none; -webkit-touch-callout: none;
+}
+.bar {
+  width: var(--bw); max-width: 100%;
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+}
+.mark { font-family: var(--display); font-size: 13px; letter-spacing: .04em; color: var(--muted); line-height: 1.1; }
+.mark b { color: var(--text); font-weight: 400; }
+.right { display: flex; align-items: center; gap: 10px; }
+.best { text-align: right; font-size: 12px; color: var(--muted); letter-spacing: .08em; text-transform: uppercase; }
+.best span { display: block; font-family: var(--display); font-size: 17px; color: var(--gold); letter-spacing: 0; font-variant-numeric: tabular-nums; }
+button {
+  font: 600 14px/1 var(--body); color: var(--text);
+  background: var(--well); border: 0; border-radius: 10px;
+  padding: 10px 12px; cursor: pointer;
+  box-shadow: inset 0 -3px 0 rgba(0,0,0,.3), inset 0 0 0 1px var(--line);
+}
+button:focus-visible { outline: 3px solid var(--gold); outline-offset: 2px; }
+button.armed { background: #5a2333; color: #ffd9de; }
+button.icon { padding: 8px; display: grid; place-items: center; }
+button.icon svg { width: 20px; height: 20px; display: block; }
+.scorebox { text-align: center; display: grid; gap: 2px; }
+.score { font-family: var(--display); font-size: clamp(34px, 11vw, 52px); line-height: 1; color: var(--text); font-variant-numeric: tabular-nums; text-shadow: 0 3px 0 rgba(0,0,0,.35); }
+.pips { display: flex; gap: 6px; justify-content: center; height: 8px; }
+.pips i { width: 8px; height: 8px; border-radius: 50%; background: var(--line); }
+.pips i.on { background: var(--gold); box-shadow: 0 0 6px rgba(255,207,63,.6); }
+.pips.idle { visibility: hidden; }
+.combo { height: 18px; font-size: 14px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: var(--gold); }
+.wrap { position: relative; }
+.board {
+  display: grid;
+  grid-template-columns: repeat(8, var(--cell));
+  gap: var(--gap); padding: var(--pad);
+  background: var(--board); border-radius: 14px;
+  box-shadow: inset 0 0 0 2px var(--line), 0 18px 40px rgba(0,0,0,.35);
+  touch-action: none;
+}
+.cell { width: var(--cell); height: var(--cell); border-radius: 18%; background: var(--well); position: relative; }
+.cell.on, .b, .cell.ghost {
+  background: var(--c);
+  box-shadow: inset 0 calc(var(--s, var(--cell)) * -.1) 0 rgba(0,0,0,.28), inset 0 calc(var(--s, var(--cell)) * .08) 0 rgba(255,255,255,.35);
+}
+.cell.ghost { --c: var(--g); opacity: .5; }
+.cell.hint { filter: brightness(1.35) saturate(1.1); box-shadow: 0 0 0 2px rgba(255,255,255,.75), inset 0 0 0 100px rgba(255,255,255,.08); }
+.cell.hint:not(.on):not(.ghost) { background: #34407e; }
+.burst { position: absolute; inset: 0; border-radius: inherit; background: var(--c); animation: burst .2s ease-in forwards; pointer-events: none; }
+@keyframes burst { 0% { transform: scale(1); filter: brightness(1.9); } 100% { transform: scale(.55); opacity: 0; } }
+/* Line clear: the line turns into a glowing band, shards pull toward its middle,
+   the band pinches to a thin streak, then the streak shrinks away. */
+.sweep { position: absolute; pointer-events: none; z-index: 5; }
+.sweep .band {
+  position: absolute; inset: 0; border-radius: 6px;
+  background: var(--c); background: color-mix(in srgb, var(--c) 30%, #ffffff);
+  box-shadow: 0 0 10px 2px var(--c), 0 0 28px 6px var(--c);
+  animation: band-row .78s cubic-bezier(.5,0,.6,1) forwards;
+}
+.sweep.col .band { animation-name: band-col; }
+@keyframes band-row {
+  0% { opacity: 0; transform: scale(1.03, 1.15); }
+  12% { opacity: .85; }
+  42% { opacity: 1; transform: scale(1, 1); }
+  64% { transform: scale(.7, .14); }
+  86% { opacity: 1; transform: scale(.42, .1); }
+  100% { opacity: 0; transform: scale(0, .08); }
+}
+@keyframes band-col {
+  0% { opacity: 0; transform: scale(1.15, 1.03); }
+  12% { opacity: .85; }
+  42% { opacity: 1; transform: scale(1, 1); }
+  64% { transform: scale(.14, .7); }
+  86% { opacity: 1; transform: scale(.1, .42); }
+  100% { opacity: 0; transform: scale(.08, 0); }
+}
+.sweep i {
+  position: absolute; border-radius: 22%;
+  background: var(--c); box-shadow: 0 0 6px var(--c);
+  animation: shard .55s ease-in both;
+}
+@keyframes shard {
+  0% { opacity: 0; transform: translate(-50%, -50%) scale(.3); }
+  18% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  60% { opacity: 1; }
+  100% { opacity: 0; transform: translate(calc(-50% + var(--dx)), calc(-50% + var(--dy))) scale(.15); }
+}
+.pop { position: absolute; transform: translate(-50%, -50%); font-family: var(--display); font-size: 22px; color: var(--gold); text-shadow: 0 2px 0 rgba(0,0,0,.5); pointer-events: none; animation: rise .9s ease-out forwards; white-space: nowrap; }
+@keyframes rise { 0% { opacity: 0; transform: translate(-50%, -30%) scale(.7); } 20% { opacity: 1; transform: translate(-50%, -50%) scale(1.1); } 100% { opacity: 0; transform: translate(-50%, -160%) scale(1); } }
+.cheer {
+  position: absolute; left: 50%; top: 42%; z-index: 8; pointer-events: none; text-align: center;
+  transform: translate(-50%, -50%);
+  animation: cheer 1.6s cubic-bezier(.2,1.3,.4,1) forwards;
+}
+.cheer b {
+  display: block; font-family: var(--display); font-weight: 400; white-space: nowrap;
+  font-size: clamp(34px, 10vw, 56px); line-height: 1; color: var(--cc);
+  text-shadow: 0 3px 0 rgba(0,0,0,.45), 0 0 26px var(--cc);
+}
+.cheer span { display: block; margin-top: 6px; font-weight: 600; font-size: 15px; color: var(--text); text-shadow: 0 2px 0 rgba(0,0,0,.55); white-space: nowrap; }
+@keyframes cheer {
+  0% { opacity: 0; transform: translate(-50%, -50%) scale(.4) rotate(-6deg); }
+  15% { opacity: 1; transform: translate(-50%, -50%) scale(1.12) rotate(2deg); }
+  25% { transform: translate(-50%, -50%) scale(1) rotate(0); }
+  80% { opacity: 1; transform: translate(-50%, -56%) scale(1); }
+  100% { opacity: 0; transform: translate(-50%, -78%) scale(.95); }
+}
+.tray { width: var(--bw); max-width: 100%; display: grid; grid-template-columns: repeat(3, 1fr); touch-action: none; }
+.slot { min-height: calc(var(--pc) * 5 + var(--pg) * 4 + 12px); display: flex; align-items: center; justify-content: center; cursor: grab; border-radius: 12px; }
+.slot:focus-visible { outline: 3px solid var(--gold); }
+.piece { display: grid; gap: var(--pg); --s: var(--pc); }
+.piece .b { width: var(--pc); height: var(--pc); border-radius: 18%; }
+.slot.dead .piece { opacity: .28; filter: grayscale(.85); }
+.slot.held .piece { opacity: 0; }
+.slot.fresh .piece { animation: deal .32s cubic-bezier(.2,1.4,.4,1) both; }
+.slot.fresh:nth-child(2) .piece { animation-delay: .05s; }
+.slot.fresh:nth-child(3) .piece { animation-delay: .1s; }
+@keyframes deal { from { transform: translateY(18px) scale(.6); opacity: 0; } }
+.float { position: fixed; left: 0; top: 0; z-index: 50; pointer-events: none; --pc: var(--cell); --pg: var(--gap); filter: drop-shadow(0 10px 14px rgba(0,0,0,.45)); }
+.status { font-size: 13px; color: var(--muted); display: flex; align-items: center; justify-content: center; gap: 6px; max-width: var(--bw); text-align: center; }
+.status i { flex: none; }
+.status.hard { color: var(--text); }
+.status.hard i { background: var(--gold); box-shadow: 0 0 6px var(--gold); }
+.status i { width: 8px; height: 8px; border-radius: 50%; background: var(--good); display: inline-block; }
+.status.warn i { background: var(--warn); }
+details { width: var(--bw); max-width: 100%; font-size: 15px; line-height: 1.5; color: var(--muted); }
+summary { cursor: pointer; color: var(--text); font-weight: 500; padding: 6px 0; }
+summary:focus-visible { outline: 3px solid var(--gold); border-radius: 6px; }
+details p { margin: 6px 0 0; max-width: 62ch; }
+details strong { color: var(--text); font-weight: 600; }
+.over {
+  position: absolute; inset: 0; border-radius: 14px;
+  background: rgba(10, 14, 36, .82); backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px);
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; text-align: center; padding: 20px;
+}
+.over h2 { margin: 0; font-family: var(--display); font-weight: 400; font-size: 26px; letter-spacing: .02em; }
+.over .final { font-family: var(--display); font-size: 48px; color: var(--gold); line-height: 1; font-variant-numeric: tabular-nums; }
+.over .nb { color: var(--good); font-weight: 600; letter-spacing: .1em; text-transform: uppercase; font-size: 13px; }
+.over p { margin: 0; color: var(--muted); max-width: 30ch; }
+.over button { background: var(--gold); color: #2a1d00; font-size: 17px; padding: 14px 26px; box-shadow: inset 0 -4px 0 rgba(0,0,0,.25); }
+@media (prefers-reduced-motion: reduce) {
+  .burst, .pop, .slot.fresh .piece, .sweep .band, .sweep i { animation-duration: .01s; }
+  .cheer { animation-duration: 1.2s; animation-timing-function: steps(1, end); }
+}
+</style>
+</head>
+<body>
+
+<div class="app" id="app">
+  <div class="bar">
+    <div class="mark"><b>Honest</b><br>Blocks</div>
+    <div class="right">
+      <div class="best">Best<span id="best">0</span></div>
+      <button id="sound" class="icon" type="button" aria-label="Sound" aria-pressed="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M11 5 6 9H3v6h3l5 4z" fill="currentColor"/>
+          <g id="soundOn"><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18.5 5.5a9 9 0 0 1 0 13"/></g>
+          <g id="soundOff" hidden><path d="m16 9 6 6"/><path d="m22 9-6 6"/></g>
+        </svg>
+      </button>
+      <button id="restart" type="button">Restart</button>
+    </div>
+  </div>
+  <div class="scorebox">
+    <div class="score" id="score">0</div>
+    <div class="combo" id="combo"></div>
+    <div class="pips idle" id="pips" title="Placements left before your combo breaks"><i></i><i></i><i></i></div>
+  </div>
+  <div class="wrap" id="wrap">
+    <div class="board" id="board" aria-label="Game board, 8 by 8"></div>
+    <div class="over" id="over" hidden>
+      <h2>No moves left</h2>
+      <div class="final" id="final">0</div>
+      <div class="nb" id="newbest" hidden>New best</div>
+      <p>None of your pieces fit. No ads, no continues. Just go again.</p>
+      <button id="again" type="button">Play again</button>
+    </div>
+  </div>
+  <div class="tray" id="tray"></div>
+  <div class="status" id="status"><i></i><span id="statusText">Deal 1</span></div>
+  <details>
+    <summary>How pieces are dealt</summary>
+    <p>Every deal is three pieces drawn at random from the <strong>same fixed odds</strong>, from your first move to your thousandth. The dealer never looks at your score, your streak or how long you've played. There are no ads or continues to sell you, so there's no reason to squeeze you.</p>
+    <p>One rule is on your side: before a deal is shown, the game checks that <strong>all three pieces can be placed on your current board</strong> in some order. If they can't, it throws that deal away and draws again. You can still lose by placing pieces badly. You just never get handed a set that was impossible from the start.</p>
+    <p>Hard sets pay extra. When a deal lands, the game counts how many different ways all three pieces can still fit on your board. Fewer than 120 ways makes it a tricky set, and the bonus grows as the count shrinks, up to a brutal set with only 1 or 2 ways. Place all three and you get the bonus. The line under the pieces tells you when one is in play. This count only affects your reward. It never changes which pieces you get.</p>
+    <p>Scoring: 1 point per block placed. Every placement that clears at least one line adds 1 to your combo, no matter how many lines it clears. Your combo survives up to 2 placements without a clear; the third one in a row breaks it. The dots under the score show how many misses you have left.</p>
+    <p>Clearing lines scores 10 per line, plus 10 more per line for each step of combo you already had, plus a bonus for clearing several at once. With no combo running that works out to 10, 30, 60, 100 or 150 for 1 to 5 lines. Wiping the whole board is worth 300 extra.</p>
+  </details>
+</div>
+
+<script>
+(() => {
+  // If a newer copy of this script starts (page update, reload), shut down the old one
+  // and sweep up anything it left behind, like a piece mid-drag.
+  try { window.__hbAbort?.abort(); } catch {}
+  const ac = new AbortController();
+  window.__hbAbort = ac;
+  const sig = { signal: ac.signal };
+  document.querySelectorAll(".float").forEach(el => el.remove());
+  const N = 8;
+  const COLORS = ["#ff4d6d", "#ff9f1c", "#ffd23f", "#2ec4b6", "#3a86ff", "#8f5cff", "#7bd84a"];
+  // Shape families and their odds. Weight is split evenly across a family's rotations,
+  // so a shape with 4 orientations isn't 4x as common as one with 1.
+  const FAMILIES = [
+    { w: 2, rows: ["X"] },
+    { w: 3, rows: ["XX"] },
+    { w: 4, rows: ["XXX"] },
+    { w: 4, rows: ["XXXX"] },
+    { w: 3, rows: ["XXXXX"] },
+    { w: 4, rows: ["XX", "XX"] },
+    { w: 2, rows: ["XXX", "XXX", "XXX"] },
+    { w: 3, rows: ["XXX", "XXX"] },
+    { w: 4, rows: ["X.", "XX"] },
+    { w: 5, rows: ["X.", "X.", "XX"], mirror: true },
+    { w: 3, rows: ["X..", "X..", "XXX"] },
+    { w: 3, rows: ["XXX", ".X."] },
+    { w: 2, rows: [".XX", "XX."], mirror: true },
+  ];
+
+  const parse = rows => rows.flatMap((r, y) => [...r].map((ch, x) => ch === "X" ? [y, x] : null).filter(Boolean));
+  const norm = c => {
+    const my = Math.min(...c.map(p => p[0])), mx = Math.min(...c.map(p => p[1]));
+    return c.map(([y, x]) => [y - my, x - mx]).sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+  };
+  const rot = c => c.map(([y, x]) => [x, -y]);
+  const mir = c => c.map(([y, x]) => [y, -x]);
+  FAMILIES.forEach(f => {
+    const base = parse(f.rows), out = new Map();
+    for (let s of f.mirror ? [base, mir(base)] : [base]) {
+      for (let i = 0; i < 4; i++) { const n = norm(s); out.set(JSON.stringify(n), n); s = rot(s); }
+    }
+    f.variants = [...out.entries()].map(([key, cells]) => ({
+      key, cells,
+      h: Math.max(...cells.map(p => p[0])) + 1,
+      w: Math.max(...cells.map(p => p[1])) + 1,
+    }));
+  });
+  const TOTAL_W = FAMILIES.reduce((s, f) => s + f.w, 0);
+
+  // Real randomness from the device, not Math.random.
+  const rand = () => crypto.getRandomValues(new Uint32Array(1))[0] / 4294967296;
+  const pick = arr => arr[Math.floor(rand() * arr.length)];
+
+  // Note what this takes: nothing. No score, no streak, no play time.
+  function randomPiece() {
+    let r = rand() * TOTAL_W, fam = FAMILIES[0];
+    for (const f of FAMILIES) { if ((r -= f.w) < 0) { fam = f; break; } }
+    const v = pick(fam.variants);
+    return { key: v.key, cells: v.cells, h: v.h, w: v.w, color: Math.floor(rand() * COLORS.length) };
+  }
+
+  const canPlace = (b, p, r, c) => {
+    if (r < 0 || c < 0 || r + p.h > N || c + p.w > N) return false;
+    for (const [y, x] of p.cells) if (b[(r + y) * N + c + x] >= 0) return false;
+    return true;
+  };
+  const fitsAnywhere = (b, p) => {
+    for (let r = 0; r + p.h <= N; r++) for (let c = 0; c + p.w <= N; c++) if (canPlace(b, p, r, c)) return true;
+    return false;
+  };
+  function fullLines(b) {
+    const rows = [], cols = [];
+    for (let i = 0; i < N; i++) {
+      let rf = true, cf = true;
+      for (let j = 0; j < N; j++) { if (b[i * N + j] < 0) rf = false; if (b[j * N + i] < 0) cf = false; }
+      if (rf) rows.push(i); if (cf) cols.push(i);
+    }
+    return { rows, cols };
+  }
+  function clearLines(b) {
+    const { rows, cols } = fullLines(b);
+    for (const r of rows) for (let j = 0; j < N; j++) b[r * N + j] = -1;
+    for (const c of cols) for (let j = 0; j < N; j++) b[j * N + c] = -1;
+    return { rows, cols };
+  }
+  const stamp = (b, p, r, c, v) => { for (const [y, x] of p.cells) b[(r + y) * N + c + x] = v; };
+
+  // Can every piece in ps be placed, in some order, on board b? Line clears count.
+  function solvable(b, ps, budget) {
+    if (!ps.length) return true;
+    const tried = new Set();
+    for (let i = 0; i < ps.length; i++) {
+      const p = ps[i];
+      if (tried.has(p.key)) continue;
+      tried.add(p.key);
+      const rest = ps.filter((_, j) => j !== i);
+      for (let r = 0; r + p.h <= N; r++) for (let c = 0; c + p.w <= N; c++) {
+        if (!canPlace(b, p, r, c)) continue;
+        if (--budget.n < 0) return false;
+        const nb = b.slice(); stamp(nb, p, r, c, 0); clearLines(nb);
+        if (solvable(nb, rest, budget)) return true;
+      }
+    }
+    return false;
+  }
+
+  function deal(board) {
+    let fallback = null;
+    for (let t = 0; t < 150; t++) {
+      const ps = [randomPiece(), randomPiece(), randomPiece()];
+      if (solvable(board, ps, { n: 3000 })) return { pieces: ps, checked: true, diff: rate(board, ps) };
+      if (!fallback && ps.some(p => fitsAnywhere(board, p))) fallback = ps;
+    }
+    return { pieces: fallback || [randomPiece(), randomPiece(), randomPiece()], checked: false };
+  }
+
+  // Difficulty is measured after the deal is drawn, only to decide the reward.
+  // It never feeds back into which pieces get drawn.
+  // Measure: how many different ways the three pieces can all be placed on this board.
+  const WAYS_CAP = 400;
+  const TIERS = [
+    { max: 2, word: "Unreal!", label: "Brutal set", color: "#ff4d6d" },
+    { max: 8, word: "Clutch!", label: "Very hard set", color: "#ff9f1c" },
+    { max: 30, word: "Great!", label: "Hard set", color: "#ffd23f" },
+    { max: 120, word: "Nice!", label: "Tricky set", color: "#5fe0a6" },
+  ];
+  function countWays(b, ps, st) {
+    if (!ps.length) { st.ways++; return; }
+    const tried = new Set();
+    for (let i = 0; i < ps.length; i++) {
+      const p = ps[i];
+      if (tried.has(p.key)) continue;
+      tried.add(p.key);
+      const rest = ps.filter((_, j) => j !== i);
+      for (let r = 0; r + p.h <= N; r++) for (let c = 0; c + p.w <= N; c++) {
+        if (st.ways >= WAYS_CAP || st.n <= 0) return;
+        if (!canPlace(b, p, r, c)) continue;
+        st.n--;
+        const nb = b.slice(); stamp(nb, p, r, c, 0); clearLines(nb);
+        countWays(nb, rest, st);
+      }
+    }
+  }
+  function rate(b, ps) {
+    const st = { ways: 0, n: 60000 };
+    countWays(b, ps, st);
+    // Plenty of ways (easy), or too many branches to count exactly: no bonus.
+    if (st.ways >= WAYS_CAP || st.n <= 0 || st.ways === 0) return null;
+    const tier = TIERS.findIndex(t => st.ways <= t.max);
+    if (tier < 0) return null;
+    return { ways: st.ways, tier, bonus: Math.round(60 * Math.log2(WAYS_CAP / st.ways)) };
+  }
+
+  // Line clear bonus: 10 x (lines x combo before this clear + lines(lines+1)/2).
+  // Community-reported Block Blast formula, not confirmed by the developer.
+  const clearPts = (lines, prevCombo) => 10 * (lines * prevCombo + lines * (lines + 1) / 2);
+  const MISS_LIMIT = 3;
+  const store = {
+    get(k) { try { return JSON.parse(localStorage.getItem(k)); } catch { return null; } },
+    set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} },
+  };
+
+  // Sound effects, synthesized on the fly so there are no audio files to load.
+  const sfx = (() => {
+    let ctx = null, master = null, noiseBuf = null;
+    let muted = store.get("hb-muted") === true;
+    function ensure() {
+      if (!ctx) {
+        const AC = window.AudioContext || window.webkitAudioContext;
+        if (!AC) return null;
+        ctx = new AC();
+        master = ctx.createGain(); master.gain.value = .55; master.connect(ctx.destination);
+        noiseBuf = ctx.createBuffer(1, ctx.sampleRate * .5, ctx.sampleRate);
+        const d = noiseBuf.getChannelData(0);
+        for (let k = 0; k < d.length; k++) d[k] = Math.random() * 2 - 1;
+      }
+      if (ctx.state === "suspended") ctx.resume().catch(() => {});
+      return ctx;
+    }
+    function tone(f, t0, dur, { type = "sine", vol = .3, slide = 0 } = {}) {
+      const o = ctx.createOscillator(), g = ctx.createGain();
+      o.type = type; o.frequency.setValueAtTime(f, t0);
+      if (slide) o.frequency.exponentialRampToValueAtTime(f * slide, t0 + dur);
+      g.gain.setValueAtTime(.0001, t0);
+      g.gain.exponentialRampToValueAtTime(vol, t0 + .008);
+      g.gain.exponentialRampToValueAtTime(.0001, t0 + dur);
+      o.connect(g); g.connect(master);
+      o.start(t0); o.stop(t0 + dur + .03);
+    }
+    function hiss(t0, dur, vol, freq) {
+      const s = ctx.createBufferSource(), f = ctx.createBiquadFilter(), g = ctx.createGain();
+      s.buffer = noiseBuf; f.type = "bandpass"; f.frequency.value = freq; f.Q.value = 1.2;
+      g.gain.setValueAtTime(vol, t0); g.gain.exponentialRampToValueAtTime(.0001, t0 + dur);
+      s.connect(f); f.connect(g); g.connect(master);
+      s.start(t0); s.stop(t0 + dur + .02);
+    }
+    const play = fn => { if (muted) return; if (!ensure()) return; try { fn(ctx.currentTime); } catch {} };
+    const semi = n => Math.pow(2, n / 12);
+    return {
+      unlock() { if (!muted) ensure(); },
+      get muted() { return muted; },
+      setMuted(m) { muted = m; store.set("hb-muted", m); if (!m) ensure(); },
+      pick: () => play(t => tone(700, t, .05, { type: "triangle", vol: .1 })),
+      place: () => play(t => { tone(190, t, .1, { type: "triangle", vol: .32, slide: .55 }); hiss(t, .05, .1, 1600); }),
+      miss: () => play(t => tone(260, t, .09, { vol: .1, slide: .75 })),
+      clear: (lines, combo, wiped) => play(t => {
+        const base = 523.25 * semi(Math.min(combo - 1, 12));
+        const steps = [0, 4, 7, 12, 16, 19, 24];
+        const n = Math.min(2 + lines + (wiped ? 2 : 0), steps.length);
+        for (let k = 0; k < n; k++) tone(base * semi(steps[k]), t + .04 + k * .055, .3, { vol: .16 });
+        hiss(t + .02, .4, .07, 5200);
+      }),
+      deal: () => play(t => [0, 5, 9].forEach((s, k) => tone(440 * semi(s), t + .12 + k * .045, .07, { type: "triangle", vol: .06 }))),
+      cheer: tier => play(t => {
+        const steps = [0, 4, 7, 12, 16, 19, 24], n = 7 - tier;
+        steps.slice(0, n).forEach((s, k) => tone(659.25 * semi(s), t + .25 + k * .07, .22, { type: "triangle", vol: .14 }));
+        tone(659.25 * semi(steps[n - 1]), t + .25 + n * .07, .5, { vol: .12 });
+      }),
+      over: () => play(t => [392, 330, 262, 196].forEach((f, k) => tone(f, t + .2 + k * .17, .32, { type: "triangle", vol: .16 }))),
+    };
+  })();
+
+  let S;
+  function freshState(best) {
+    const board = new Array(N * N).fill(-1);
+    const d = deal(board);
+    return { board, tray: d.pieces, checked: d.checked, diff: d.diff || null, dealNo: 1, score: 0, best: best || 0, streak: 0, miss: 0, over: false, newBest: false };
+  }
+  const valid = s => s && Array.isArray(s.board) && s.board.length === N * N && Array.isArray(s.tray) && s.tray.length === 3 && typeof s.score === "number";
+
+  const $ = id => document.getElementById(id);
+  const boardEl = $("board"), trayEl = $("tray"), wrapEl = $("wrap");
+  boardEl.replaceChildren(); trayEl.replaceChildren();
+  wrapEl.querySelectorAll(".pop").forEach(el => el.remove());
+  const cells = [];
+  for (let i = 0; i < N * N; i++) { const d = document.createElement("div"); d.className = "cell"; boardEl.appendChild(d); cells.push(d); }
+  const slots = [0, 1, 2].map(i => {
+    const s = document.createElement("div");
+    s.className = "slot"; s.dataset.i = i;
+    trayEl.appendChild(s);
+    s.addEventListener("pointerdown", e => startDrag(e, i), sig);
+    s.addEventListener("lostpointercapture", e => endDrag(e), sig);
+    return s;
+  });
+
+  function layout() {
+    const W = document.documentElement.clientWidth - 32;
+    const H = window.innerHeight;
+    const size = Math.max(250, Math.min(W, 470, (H - 190) / 1.36));
+    const pad = Math.round(size * .025), gap = Math.max(2, Math.round(size * .008));
+    const cell = Math.floor((size - pad * 2 - gap * 7) / 8);
+    const bw = cell * 8 + gap * 7 + pad * 2;
+    const st = document.documentElement.style;
+    st.setProperty("--cell", cell + "px"); st.setProperty("--gap", gap + "px"); st.setProperty("--pad", pad + "px");
+    st.setProperty("--bw", bw + "px");
+    st.setProperty("--pc", Math.floor(cell * .5) + "px"); st.setProperty("--pg", Math.max(1, Math.round(gap * .7)) + "px");
+  }
+
+  function pieceEl(p) {
+    const el = document.createElement("div");
+    el.className = "piece";
+    el.style.gridTemplateColumns = `repeat(${p.w}, var(--pc))`;
+    el.style.gridTemplateRows = `repeat(${p.h}, var(--pc))`;
+    for (const [y, x] of p.cells) {
+      const b = document.createElement("div");
+      b.className = "b"; b.style.gridRow = y + 1; b.style.gridColumn = x + 1;
+      b.style.setProperty("--c", COLORS[p.color]);
+      el.appendChild(b);
+    }
+    return el;
+  }
+
+  function renderBoard() {
+    S.board.forEach((v, i) => {
+      const el = cells[i];
+      el.classList.toggle("on", v >= 0);
+      if (v >= 0) el.style.setProperty("--c", COLORS[v]); else el.style.removeProperty("--c");
+    });
+  }
+  function renderTray(fresh) {
+    S.tray.forEach((p, i) => {
+      const s = slots[i];
+      s.replaceChildren();
+      s.classList.remove("held", "fresh");
+      if (p) {
+        s.appendChild(pieceEl(p));
+        s.classList.toggle("dead", !fitsAnywhere(S.board, p));
+        s.setAttribute("aria-label", `Piece of ${p.cells.length} blocks`);
+        if (fresh) { void s.offsetWidth; s.classList.add("fresh"); }
+      } else { s.classList.remove("dead"); s.removeAttribute("aria-label"); }
+    });
+  }
+  function renderHud() {
+    $("score").textContent = S.score.toLocaleString();
+    $("best").textContent = S.best.toLocaleString();
+    $("combo").textContent = S.streak >= 2 ? `Combo ${S.streak}` : S.streak === 1 ? "Combo started" : "";
+    $("pips").classList.toggle("idle", S.streak < 1);
+    [...$("pips").children].forEach((d, k) => d.classList.toggle("on", k < MISS_LIMIT - S.miss));
+    $("status").classList.toggle("warn", !S.checked);
+    const df = S.over ? null : S.diff;
+    $("status").classList.toggle("hard", !!df);
+    $("statusText").textContent = `Deal ${S.dealNo} · ` + (!S.checked ? "no fitting set found"
+      : df ? `${TIERS[df.tier].label}, ${df.ways} way${df.ways === 1 ? "" : "s"} to fit · +${df.bonus} if you place all three`
+      : "checked, all three fit");
+    $("over").hidden = !S.over;
+    $("final").textContent = S.score.toLocaleString();
+    $("newbest").hidden = !S.newBest;
+  }
+  function render(fresh) { renderBoard(); renderTray(fresh); renderHud(); store.set("hb-game", S); }
+
+  function pop(text, x, y) {
+    const el = document.createElement("div");
+    el.className = "pop"; el.textContent = text;
+    el.style.left = x + "px"; el.style.top = y + "px";
+    wrapEl.appendChild(el);
+    el.addEventListener("animationend", () => el.remove());
+  }
+
+  function cheer(diff) {
+    wrapEl.querySelectorAll(".cheer").forEach(el => el.remove());
+    const t = TIERS[diff.tier];
+    const el = document.createElement("div");
+    el.className = "cheer";
+    el.style.setProperty("--cc", t.color);
+    const w = document.createElement("b"); w.textContent = t.word;
+    const s = document.createElement("span"); s.textContent = `+${diff.bonus} · ${t.label.toLowerCase()} beaten`;
+    el.append(w, s);
+    wrapEl.appendChild(el);
+    el.addEventListener("animationend", () => el.remove());
+    sfx.cheer(diff.tier);
+  }
+
+  function sweep(a, b, dir, color) {
+    const wr = wrapEl.getBoundingClientRect(), ar = a.getBoundingClientRect(), br = b.getBoundingClientRect();
+    const el = document.createElement("div");
+    el.className = "sweep " + dir;
+    el.style.setProperty("--c", color);
+    const W = br.right - ar.left, H = br.bottom - ar.top;
+    Object.assign(el.style, { left: ar.left - wr.left + "px", top: ar.top - wr.top + "px", width: W + "px", height: H + "px" });
+    const band = document.createElement("div");
+    band.className = "band";
+    el.appendChild(band);
+    const row = dir === "row", along = row ? W : H, thick = row ? H : W, count = 14;
+    for (let k = 0; k < count; k++) {
+      const q = document.createElement("i");
+      const size = thick * (.12 + rand() * .3);
+      const pos = (k + .5) / count * along + (rand() - .5) * along / count;
+      const off = thick / 2 + (rand() - .5) * thick * .45;
+      const pull = (along / 2 - pos) * .35, settle = thick / 2 - off;
+      Object.assign(q.style, {
+        width: size + "px", height: size + "px",
+        left: (row ? pos : off) + "px", top: (row ? off : pos) + "px",
+        animationDelay: Math.round(rand() * 90) + "ms",
+      });
+      q.style.setProperty("--dx", (row ? pull : settle) + "px");
+      q.style.setProperty("--dy", (row ? settle : pull) + "px");
+      el.appendChild(q);
+    }
+    wrapEl.appendChild(el);
+    setTimeout(() => el.remove(), 950);
+  }
+
+  function place(i, r, c) {
+    const p = S.tray[i];
+    const b = S.board;
+    stamp(b, p, r, c, p.color);
+    sfx.place();
+    const before = b.slice();
+    const { rows, cols } = clearLines(b);
+    const n = rows.length + cols.length;
+    let pts = p.cells.length;
+    if (n > 0) {
+      pts += clearPts(n, S.streak);
+      S.streak += 1; S.miss = 0;
+      const wiped = b.every(v => v < 0);
+      if (wiped) pts += 300;
+      const hit = new Set();
+      rows.forEach(rr => { for (let j = 0; j < N; j++) hit.add(rr * N + j); });
+      cols.forEach(cc => { for (let j = 0; j < N; j++) hit.add(j * N + cc); });
+      hit.forEach(idx => {
+        const s = document.createElement("span");
+        s.className = "burst"; s.style.setProperty("--c", COLORS[before[idx]]);
+        cells[idx].appendChild(s);
+        s.addEventListener("animationend", () => s.remove());
+      });
+      rows.forEach(rr => sweep(cells[rr * N], cells[rr * N + N - 1], "row", COLORS[p.color]));
+      cols.forEach(cc => sweep(cells[cc], cells[(N - 1) * N + cc], "col", COLORS[p.color]));
+      sfx.clear(n, S.streak, wiped);
+    } else {
+      if (S.streak > 0) {
+        S.miss += 1;
+        if (S.miss >= MISS_LIMIT) { S.streak = 0; S.miss = 0; }
+      }
+    }
+    S.score += pts;
+    S.tray[i] = null;
+    const cr = cells[(r + Math.floor(p.h / 2)) * N + c + Math.floor(p.w / 2)];
+    const wr = wrapEl.getBoundingClientRect(), rr = cr.getBoundingClientRect();
+    if (n > 0) pop(`+${pts}` + (S.streak >= 2 ? ` · Combo ${S.streak}` : n > 1 ? ` · ${n} lines` : ""), rr.left - wr.left + rr.width / 2, rr.top - wr.top);
+
+    let fresh = false;
+    if (S.tray.every(t => !t)) {
+      if (S.diff) { S.score += S.diff.bonus; cheer(S.diff); }
+      const d = deal(S.board);
+      S.tray = d.pieces; S.checked = d.checked; S.diff = d.diff || null; S.dealNo += 1; fresh = true;
+      sfx.deal();
+    }
+    if (S.score > S.best) { S.best = S.score; S.newBest = true; store.set("hb-best", S.best); }
+    if (!S.tray.some(t => t && fitsAnywhere(S.board, t))) { S.over = true; sfx.over(); }
+    render(fresh);
+  }
+
+  // Dragging
+  let drag = null;
+  function clearPreview() { cells.forEach(el => { el.classList.remove("ghost", "hint"); el.style.removeProperty("--g"); }); }
+  function startDrag(e, i) {
+    const p = S.tray[i];
+    if (!p || S.over || drag) return;
+    e.preventDefault();
+    sfx.unlock(); sfx.pick();
+    const c0 = cells[0].getBoundingClientRect(), c1 = cells[1].getBoundingClientRect();
+    const fl = document.createElement("div");
+    fl.className = "float";
+    fl.appendChild(pieceEl(p));
+    document.body.appendChild(fl);
+    const pitch = c1.left - c0.left;
+    drag = {
+      i, p, fl, pitch, ox: c0.left, oy: c0.top, id: e.pointerId,
+      lift: e.pointerType === "mouse" ? 0 : pitch * 1.2,
+      w: p.w * pitch - (pitch - c0.width), h: p.h * pitch - (pitch - c0.width),
+      target: null,
+    };
+    slots[i].classList.add("held");
+    try { slots[i].setPointerCapture(e.pointerId); } catch {}
+    moveDrag(e);
+  }
+  function moveDrag(e) {
+    if (!drag || e.pointerId !== drag.id) return;
+    const fx = e.clientX - drag.w / 2;
+    const fy = e.clientY - drag.h / 2 - (drag.lift ? drag.h / 2 + drag.lift : 0);
+    drag.fl.style.transform = `translate(${fx}px, ${fy}px)`;
+    const r = Math.round((fy - drag.oy) / drag.pitch), c = Math.round((fx - drag.ox) / drag.pitch);
+    const key = r + "," + c;
+    if (drag.key === key) return;
+    drag.key = key;
+    clearPreview();
+    drag.target = null;
+    if (!canPlace(S.board, drag.p, r, c)) return;
+    drag.target = [r, c];
+    const sim = S.board.slice();
+    stamp(sim, drag.p, r, c, drag.p.color);
+    for (const [y, x] of drag.p.cells) { const el = cells[(r + y) * N + c + x]; el.classList.add("ghost"); el.style.setProperty("--g", COLORS[drag.p.color]); }
+    const { rows, cols } = fullLines(sim);
+    rows.forEach(rr => { for (let j = 0; j < N; j++) cells[rr * N + j].classList.add("hint"); });
+    cols.forEach(cc => { for (let j = 0; j < N; j++) cells[j * N + cc].classList.add("hint"); });
+  }
+  function cancelDrag() { if (drag) endDrag({ type: "cancel", pointerId: drag.id }); }
+  function endDrag(e) {
+    if (!drag || e.pointerId !== drag.id) return;
+    const d = drag; drag = null;
+    clearPreview();
+    d.fl.remove();
+    slots[d.i].classList.remove("held");
+    if (e.type === "pointerup" && d.target) place(d.i, d.target[0], d.target[1]);
+    else if (e.type === "pointerup") sfx.miss();
+  }
+  window.addEventListener("pointermove", moveDrag, { passive: true, signal: ac.signal });
+  window.addEventListener("pointerup", endDrag, sig);
+  window.addEventListener("pointercancel", endDrag, sig);
+  window.addEventListener("blur", cancelDrag, sig);
+  document.addEventListener("visibilitychange", () => { if (document.hidden) cancelDrag(); }, sig);
+  ac.signal.addEventListener("abort", () => { if (drag) { drag.fl.remove(); drag = null; } });
+
+  function newGame() { S = freshState(Math.max(S ? S.best : 0, store.get("hb-best") || 0)); render(true); }
+  $("again").addEventListener("click", newGame, sig);
+  function soundUi() {
+    const on = !sfx.muted;
+    $("sound").setAttribute("aria-pressed", String(on));
+    $("sound").setAttribute("aria-label", on ? "Sound on. Tap to mute" : "Sound off. Tap to unmute");
+    $("soundOn").hidden = !on; $("soundOff").hidden = on;
+  }
+  $("sound").addEventListener("click", () => { sfx.setMuted(!sfx.muted); soundUi(); if (!sfx.muted) sfx.pick(); }, sig);
+  soundUi();
+  // iOS only allows audio to start from a tap, so wake it on the first touch.
+  ["pointerdown", "touchend", "click"].forEach(ev => document.addEventListener(ev, () => sfx.unlock(), { ...sig, passive: true }));
+  let armTimer = null;
+  $("restart").addEventListener("click", e => {
+    const btn = e.currentTarget;
+    if (S.over || S.score === 0) { newGame(); return; }
+    if (btn.classList.contains("armed")) {
+      clearTimeout(armTimer); btn.classList.remove("armed"); btn.textContent = "Restart"; newGame(); return;
+    }
+    btn.classList.add("armed"); btn.textContent = "Tap again";
+    armTimer = setTimeout(() => { btn.classList.remove("armed"); btn.textContent = "Restart"; }, 3000);
+  }, sig);
+  window.addEventListener("resize", layout, sig);
+
+  function boot(data) {
+    layout();
+    const saved = valid(data) ? data : valid(data && data.state) ? data.state : store.get("hb-game");
+    if (valid(saved)) { S = saved; S.best = Math.max(S.best || 0, store.get("hb-best") || 0); render(false); }
+    else newGame();
+  }
+  try { window.claude?.hot?.snapshot?.(() => S); } catch {}
+  window.claude?.hot?.ready ? window.claude.hot.ready(boot) : boot(window.claude?.hot?.data ?? {});
+})();
+</script>
+
+</body>
+</html>
