@@ -651,6 +651,7 @@ details strong { color: var(--text); font-weight: 600; }
   }
 
   // Dragging
+  const SNAP = 1.5;
   let drag = null;
   function clearPreview() { cells.forEach(el => { el.classList.remove("ghost", "hint"); el.style.removeProperty("--g"); }); }
   function startDrag(e, i) {
@@ -679,14 +680,23 @@ details strong { color: var(--text); font-weight: 600; }
     const fx = e.clientX - drag.w / 2;
     const fy = e.clientY - drag.h / 2 - (drag.lift ? drag.h / 2 + drag.lift : 0);
     drag.fl.style.transform = `translate(${fx}px, ${fy}px)`;
-    const r = Math.round((fy - drag.oy) / drag.pitch), c = Math.round((fx - drag.ox) / drag.pitch);
-    const key = r + "," + c;
+    // Snap to the nearest spot where the piece fits, within SNAP cells of where it's hovering,
+    // so you don't have to line it up exactly.
+    const fr = (fy - drag.oy) / drag.pitch, fc = (fx - drag.ox) / drag.pitch;
+    let best = null, bestD = SNAP * SNAP;
+    for (let r = Math.floor(fr - SNAP); r <= Math.ceil(fr + SNAP); r++) {
+      for (let c = Math.floor(fc - SNAP); c <= Math.ceil(fc + SNAP); c++) {
+        const d = (r - fr) ** 2 + (c - fc) ** 2;
+        if (d <= bestD && canPlace(S.board, drag.p, r, c)) { best = [r, c]; bestD = d; }
+      }
+    }
+    const key = best ? best.join(",") : "none";
     if (drag.key === key) return;
     drag.key = key;
     clearPreview();
-    drag.target = null;
-    if (!canPlace(S.board, drag.p, r, c)) return;
-    drag.target = [r, c];
+    drag.target = best;
+    if (!best) return;
+    const [r, c] = best;
     const sim = S.board.slice();
     stamp(sim, drag.p, r, c, drag.p.color);
     for (const [y, x] of drag.p.cells) { const el = cells[(r + y) * N + c + x]; el.classList.add("ghost"); el.style.setProperty("--g", COLORS[drag.p.color]); }
