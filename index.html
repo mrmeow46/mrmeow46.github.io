@@ -234,7 +234,7 @@ details strong { color: var(--text); font-weight: 600; }
     <p>One rule is on your side: before a deal is shown, the game checks that <strong>all three pieces can be placed on your current board</strong> in some order. If they can't, it throws that deal away and draws again. You can still lose by placing pieces badly. You just never get handed a set that was impossible from the start.</p>
     <p>Hard sets pay extra. When a deal lands, the game counts how many different ways all three pieces can still fit on your board. Fewer than 120 ways makes it a tricky set, and the bonus grows as the count shrinks, up to a brutal set with only 1 or 2 ways. Place all three and you get the bonus. The line under the pieces tells you when one is in play. This count only affects your reward. It never changes which pieces you get.</p>
     <p>Scoring: 1 point per block placed. Every placement that clears at least one line adds 1 to your combo, no matter how many lines it clears. Your combo survives up to 2 placements without a clear; the third one in a row breaks it. The dots under the score show how many misses you have left.</p>
-    <p>Clearing lines scores 10 per line, plus 10 more per line for each step of combo you already had, plus a bonus for clearing several at once. With no combo running that works out to 10, 30, 60, 100 or 150 for 1 to 5 lines. Wiping the whole board is worth 300 extra.</p>
+    <p>Clearing lines scores 10 per line, plus 10 more per line for each step of combo you already had, plus a bonus for clearing several at once. With no combo running that works out to 10, 30, 60, 100 or 150 for 1 to 5 lines. Wiping the whole board is worth 500 extra.</p>
   </details>
 </div>
 
@@ -395,6 +395,7 @@ details strong { color: var(--text); font-weight: 600; }
   // Community-reported Block Blast formula, not confirmed by the developer.
   const clearPts = (lines, prevCombo) => 10 * (lines * prevCombo + lines * (lines + 1) / 2);
   const MISS_LIMIT = 3;
+  const BOARD_CLEAR_BONUS = 500;
   const store = {
     get(k) { try { return JSON.parse(localStorage.getItem(k)); } catch { return null; } },
     set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} },
@@ -609,11 +610,12 @@ details strong { color: var(--text); font-weight: 600; }
     const { rows, cols } = clearLines(b);
     const n = rows.length + cols.length;
     let pts = p.cells.length;
+    let wiped = false;
     if (n > 0) {
       pts += clearPts(n, S.streak);
       S.streak += 1; S.miss = 0;
-      const wiped = b.every(v => v < 0);
-      if (wiped) pts += 300;
+      wiped = b.every(v => v < 0);
+      if (wiped) pts += BOARD_CLEAR_BONUS;
       const hit = new Set();
       rows.forEach(rr => { for (let j = 0; j < N; j++) hit.add(rr * N + j); });
       cols.forEach(cc => { for (let j = 0; j < N; j++) hit.add(j * N + cc); });
@@ -636,7 +638,7 @@ details strong { color: var(--text); font-weight: 600; }
     S.tray[i] = null;
     const cr = cells[(r + Math.floor(p.h / 2)) * N + c + Math.floor(p.w / 2)];
     const wr = wrapEl.getBoundingClientRect(), rr = cr.getBoundingClientRect();
-    if (n > 0) pop(`+${pts}` + (S.streak >= 2 ? ` · Combo ${S.streak}` : n > 1 ? ` · ${n} lines` : ""), rr.left - wr.left + rr.width / 2, rr.top - wr.top);
+    if (n > 0) pop(`+${pts}` + (wiped ? " · Board clear!" : S.streak >= 2 ? ` · Combo ${S.streak}` : n > 1 ? ` · ${n} lines` : ""), rr.left - wr.left + rr.width / 2, rr.top - wr.top);
 
     let fresh = false;
     if (S.tray.every(t => !t)) {
