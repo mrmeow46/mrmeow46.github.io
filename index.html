@@ -653,7 +653,6 @@ details strong { color: var(--text); font-weight: 600; }
   }
 
   // Dragging
-  const SNAP = 1.5;
   let drag = null;
   function clearPreview() { cells.forEach(el => { el.classList.remove("ghost", "hint"); el.style.removeProperty("--g"); }); }
   function startDrag(e, i) {
@@ -677,28 +676,29 @@ details strong { color: var(--text); font-weight: 600; }
     try { slots[i].setPointerCapture(e.pointerId); } catch {}
     moveDrag(e);
   }
-  function moveDrag(e) {
-    if (!drag || e.pointerId !== drag.id) return;
-    const fx = e.clientX - drag.w / 2;
-    const fy = e.clientY - drag.h / 2 - (drag.lift ? drag.h / 2 + drag.lift : 0);
-    drag.fl.style.transform = `translate(${fx}px, ${fy}px)`;
-    // Snap to the nearest spot where the piece fits, within SNAP cells of where it's hovering,
-    // so you don't have to line it up exactly.
-    const fr = (fy - drag.oy) / drag.pitch, fc = (fx - drag.ox) / drag.pitch;
-    let best = null, bestD = SNAP * SNAP;
-    for (let r = Math.floor(fr - SNAP); r <= Math.ceil(fr + SNAP); r++) {
-      for (let c = Math.floor(fc - SNAP); c <= Math.ceil(fc + SNAP); c++) {
+  // Nearest spot where the dragged piece fits, at most `radius` cells from (fr, fc).
+  function nearestFit(fr, fc, radius) {
+    let best = null, bestD = radius * radius;
+    for (let r = Math.floor(fr - radius); r <= Math.ceil(fr + radius); r++) {
+      for (let c = Math.floor(fc - radius); c <= Math.ceil(fc + radius); c++) {
         const d = (r - fr) ** 2 + (c - fc) ** 2;
         if (d <= bestD && canPlace(S.board, drag.p, r, c)) { best = [r, c]; bestD = d; }
       }
     }
-    const key = best ? best.join(",") : "none";
+    return best;
+  }
+  // True when the middle of the dragged piece is over the board (with a little slack).
+  function overBoard() {
+    const mr = drag.fr + drag.p.h / 2, mc = drag.fc + drag.p.w / 2;
+    return mr > -0.75 && mr < N + 0.75 && mc > -0.75 && mc < N + 0.75;
+  }
+  function showPreview(target) {
+    const key = target ? target.join(",") : "none";
     if (drag.key === key) return;
     drag.key = key;
     clearPreview();
-    drag.target = best;
-    if (!best) return;
-    const [r, c] = best;
+    if (!target) return;
+    const [r, c] = target;
     const sim = S.board.slice();
     stamp(sim, drag.p, r, c, drag.p.color);
     for (const [y, x] of drag.p.cells) { const el = cells[(r + y) * N + c + x]; el.classList.add("ghost"); el.style.setProperty("--g", COLORS[drag.p.color]); }
@@ -706,15 +706,30 @@ details strong { color: var(--text); font-weight: 600; }
     rows.forEach(rr => { for (let j = 0; j < N; j++) cells[rr * N + j].classList.add("hint"); });
     cols.forEach(cc => { for (let j = 0; j < N; j++) cells[j * N + cc].classList.add("hint"); });
   }
+  function moveDrag(e) {
+    if (!drag || e.pointerId !== drag.id) return;
+    const fx = e.clientX - drag.w / 2;
+    const fy = e.clientY - drag.h / 2 - (drag.lift ? drag.h / 2 + drag.lift : 0);
+    drag.fl.style.transform = `translate(${fx}px, ${fy}px)`;
+    drag.fr = (fy - drag.oy) / drag.pitch;
+    drag.fc = (fx - drag.ox) / drag.pitch;
+    // Anywhere over the board, show the closest spot the piece fits, so it never needs exact aim.
+    drag.target = overBoard() ? nearestFit(drag.fr, drag.fc, N * 2) : null;
+    showPreview(drag.target);
+  }
   function cancelDrag() { if (drag) endDrag({ type: "cancel", pointerId: drag.id }); }
   function endDrag(e) {
     if (!drag || e.pointerId !== drag.id) return;
+    // Browsers disagree on whether "pointerup" or "lostpointercapture" arrives first
+    // (Safari can send lostpointercapture first). Treat either one as the drop.
+    if (e.type === "pointerup") moveDrag(e);
+    const dropped = e.type !== "cancel";
     const d = drag; drag = null;
     clearPreview();
     d.fl.remove();
     slots[d.i].classList.remove("held");
-    if (e.type === "pointerup" && d.target) place(d.i, d.target[0], d.target[1]);
-    else if (e.type === "pointerup") sfx.miss();
+    if (dropped && d.target) place(d.i, d.target[0], d.target[1]);
+    else if (dropped) sfx.miss();
   }
   window.addEventListener("pointermove", moveDrag, { passive: true, signal: ac.signal });
   window.addEventListener("pointerup", endDrag, sig);
